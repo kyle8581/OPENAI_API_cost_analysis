@@ -3,55 +3,71 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Calculate Cost per User</title>
+<title>Responsive CSV Cost Analysis</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+.chart-container {
+  position: relative;
+  margin: auto;
+  height: 60vh;
+  width: 80vw;
+}
+
+/* Add additional styling as needed */
+</style>
 </head>
 <body>
 
-<h2>Upload CSV File to Calculate Costs</h2>
-<input type="file" id="csvFileInput" accept=".csv">
-<button onclick="processCSV()">Calculate Costs</button>
+<div class="container">
+    <h2>Upload CSV Files to Calculate Costs</h2>
+    <input type="file" id="csvFileInput" accept=".csv">
+    <button class="button-primary" onclick="processCSV()">Calculate Costs</button>
 
-<div id="results"></div>
+    <div id="results" style="margin-top: 20px;"></div>
+    
+    <div class="chart-container">
+        <canvas id="costChart"></canvas>
+    </div>
+</div>
 
 <script>
-// Pricing info used for calculations (simplified for readability)
+// Define pricing information for calculations
 const pricingInfo = {
     "gpt-4-0125-preview": { "input": 10.00, "output": 30.00 },
     "gpt-4-1106-preview": { "input": 10.00, "output": 30.00 },
     "gpt-4-1106-vision-preview": { "input": 10.00, "output": 30.00 },
     "gpt-4-0613": { "input": 30.00, "output": 60.00 },
     "gpt-3.5-turbo-0125": { "input": 0.50, "output": 1.50 }
-    // Add other models as needed
+    // Extend as needed
 };
+
+let chartInstance = null; // Store the chart instance for updating
 
 function processCSV() {
     const fileInput = document.getElementById('csvFileInput');
     const file = fileInput.files[0];
     if (!file) {
-        alert('Please select a CSV file first.');
+        alert('Please select a CSV file.');
         return;
     }
 
     const reader = new FileReader();
-    
     reader.onload = function(e) {
         const text = e.target.result;
         const rows = text.split('\n').map(row => row.split(','));
         
-        // Assuming specific column indices based on provided CSV structure
+        // Assuming specific column positions based on example
         const modelIndex = rows[0].indexOf('model');
         const inputTokensIndex = rows[0].indexOf('n_context_tokens_total');
         const outputTokensIndex = rows[0].indexOf('n_generated_tokens_total');
         const userIndex = rows[0].indexOf('user');
-        
+
         const costsPerUser = {};
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            const model = row[modelIndex];
-            const inputTokens = parseInt(row[inputTokensIndex]);
-            const outputTokens = parseInt(row[outputTokensIndex]);
-            const user = row[userIndex];
-            const pricing = pricingInfo[model] || { "input": 0, "output": 0 };
+            const model = row[modelIndex], inputTokens = parseInt(row[inputTokensIndex]), outputTokens = parseInt(row[outputTokensIndex]), user = row[userIndex];
+            const pricing = pricingInfo[model] || {"input": 0, "output": 0};
 
             const cost = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
             if (costsPerUser[user]) {
@@ -61,18 +77,32 @@ function processCSV() {
             }
         }
 
-        displayResults(costsPerUser);
+        updateChart(Object.keys(costsPerUser), Object.values(costsPerUser));
     };
-    
     reader.readAsText(file);
 }
 
-function displayResults(costsPerUser) {
-    let resultsHtml = '<h3>Costs Per User</h3>';
-    for (const user in costsPerUser) {
-        resultsHtml += `<p>${user}: $${costsPerUser[user].toFixed(3)}</p>`;
+function updateChart(labels, data) {
+    if (chartInstance) {
+        chartInstance.destroy(); // Destroy the old chart instance before creating a new one
     }
-    document.getElementById('results').innerHTML = resultsHtml;
+
+    chartInstance = new Chart(document.getElementById('costChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Costs Per User ($)',
+                data: data,
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            maintainAspectRatio: false // Set to false to allow custom dimensions
+        }
+    });
 }
 </script>
 
