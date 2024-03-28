@@ -3,15 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Responsive CSV Cost Analysis</title>
+<title>CSV Cost Analysis with Side-by-Side Chart and Details</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-.chart-container {
-  position: absolute;
-  margin: auto;
-  height: 60vh;
-  width: 60vw;
+.content-container {
+  display: flex;
+  justify-content: space-between;
+}
+
+.chart-container, .user-details {
+  flex-basis: 45%; /* Adjusts the base width of each container */
+  height: 60vh; /* Adjust height as necessary */
+}
+
+.user-details {
+  overflow-y: auto; /* Adds scroll bar if content exceeds container height */
 }
 
 /* Add additional styling as needed */
@@ -24,13 +30,15 @@
     <input type="file" id="csvFileInput" accept=".csv">
     <button class="button-primary" onclick="processCSV()">Calculate Costs</button>
 
-    <div id="results" style="margin-top: 20px;"></div>
-    
-    <div class="chart-container">
-        <canvas id="costChart"></canvas>
+    <div class="content-container" style="margin-top: 20px;">
+        <div class="chart-container">
+            <canvas id="costChart"></canvas>
+        </div>
+        <div class="user-details" id="detailedCosts"></div>
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // Define pricing information for calculations
 const pricingInfo = {
@@ -39,10 +47,9 @@ const pricingInfo = {
     "gpt-4-1106-vision-preview": { "input": 10.00, "output": 30.00 },
     "gpt-4-0613": { "input": 30.00, "output": 60.00 },
     "gpt-3.5-turbo-0125": { "input": 0.50, "output": 1.50 }
-    // Extend as needed
 };
 
-let chartInstance = null; // Store the chart instance for updating
+let chartInstance = null;
 
 function processCSV() {
     const fileInput = document.getElementById('csvFileInput');
@@ -56,27 +63,29 @@ function processCSV() {
     reader.onload = function(e) {
         const text = e.target.result;
         const rows = text.split('\n').map(row => row.split(','));
-        
-        // Assuming specific column positions based on example
+
         const modelIndex = rows[0].indexOf('model');
         const inputTokensIndex = rows[0].indexOf('n_context_tokens_total');
         const outputTokensIndex = rows[0].indexOf('n_generated_tokens_total');
         const userIndex = rows[0].indexOf('user');
-
+        
         const costsPerUser = {};
+        const costsPerUserAndModel = {};
+
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            const model = row[modelIndex], inputTokens = parseInt(row[inputTokensIndex]), outputTokens = parseInt(row[outputTokensIndex]), user = row[userIndex];
+            if (row.length <= userIndex) continue;
+            const model = row[modelIndex], inputTokens = parseInt(row[inputTokensIndex], 10) || 0, outputTokens = parseInt(row[outputTokensIndex], 10) || 0, user = row[userIndex];
             const pricing = pricingInfo[model] || {"input": 0, "output": 0};
 
             const cost = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
-            if (costsPerUser[user]) {
-                costsPerUser[user] += cost;
-            } else {
-                costsPerUser[user] = cost;
-            }
+            costsPerUser[user] = (costsPerUser[user] || 0) + cost;
+            
+            if (!costsPerUserAndModel[user]) costsPerUserAndModel[user] = {};
+            costsPerUserAndModel[user][model] = (costsPerUserAndModel[user][model] || 0) + cost;
         }
-
+        
+        displayUserDetails(costsPerUserAndModel);
         updateChart(Object.keys(costsPerUser), Object.values(costsPerUser));
     };
     reader.readAsText(file);
@@ -84,7 +93,7 @@ function processCSV() {
 
 function updateChart(labels, data) {
     if (chartInstance) {
-        chartInstance.destroy(); // Destroy the old chart instance before creating a new one
+        chartInstance.destroy();
     }
 
     chartInstance = new Chart(document.getElementById('costChart'), {
@@ -100,9 +109,24 @@ function updateChart(labels, data) {
             }]
         },
         options: {
-            maintainAspectRatio: false // Set to false to allow custom dimensions
+            maintainAspectRatio: false
         }
     });
+}
+
+function displayUserDetails(data) {
+    const detailsContainer = document.getElementById('detailedCosts');
+    detailsContainer.innerHTML = ''; // Reset content
+    detailsContainer.style.display = 'block'; // Ensure visibility
+
+    for (const user in data) {
+        let userDetailsHTML = `<h4>Costs for ${user}</h4><ul>`;
+        for (const model in data[user]) {
+            userDetailsHTML += `<li>${model}: $${data[user][model].toFixed(2)}</li>`;
+        }
+        userDetailsHTML += `</ul>`;
+        detailsContainer.innerHTML += userDetailsHTML;
+    }
 }
 </script>
 
